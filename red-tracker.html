@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Red Tracker - 魔法の杖プロトタイプ</title>
+  <link rel="stylesheet" href="red-tracker.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>🪄 Red Tracker</h1>
+      <p class="subtitle">赤い物体を検出して魔法の杖に</p>
+    </header>
+
+    <div id="camera-container">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="status-badge" class="badge undetected">未検出</div>
+    </div>
+
+    <div id="controls">
+      <div class="control-row">
+        <button id="btn-start">カメラ開始</button>
+        <button id="btn-reset-trail">軌跡リセット</button>
+      </div>
+
+      <div class="slider-group">
+        <label>
+          赤色しきい値
+          <span id="threshold-val">30</span>
+          <input type="range" id="slider-threshold" min="10" max="80" value="30">
+        </label>
+        <label>
+          最小検出面積
+          <span id="area-val">500</span> px²
+          <input type="range" id="slider-area" min="100" max="5000" step="100" value="500">
+        </label>
+      </div>
+
+      <div id="info-panel">
+        <div class="info-item">
+          <span class="info-label">座標</span>
+          <span id="info-pos">---</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">速度</span>
+          <span id="info-vel">---</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">面積</span>
+          <span id="info-area">---</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="help">
+      <p>⚠️ カメラは <code>localhost</code> または <code>https</code> で動作します。</p>
+      <p>ローカル起動: <code>python3 -m http.server 8080</code> → <code>http://localhost:8080/red-tracker.html</code></p>
+    </div>
+  </div>
+
+  <script src="red-tracker.js"></script>
+</body>
+</html>
