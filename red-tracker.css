@@ -22,26 +22,6 @@ body {
   gap: 16px;
 }
 
-header {
-  text-align: center;
-  padding: 8px 0;
-}
-
-header h1 {
-  font-size: 1.8rem;
-  letter-spacing: 0.05em;
-  background: linear-gradient(135deg, #ff4466, #ff88aa, #ffcccc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.subtitle {
-  font-size: 0.85rem;
-  color: #888;
-  margin-top: 4px;
-}
-
 /* Camera */
 #camera-container {
   position: relative;
