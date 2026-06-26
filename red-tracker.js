@@ -28,8 +28,8 @@ const infoArea = document.getElementById('info-area');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 let cfg = {
-  threshold: 30,   // 赤の判定しきい値 (R - max(G,B) > threshold)
-  minArea:   500,  // 最小検出面積 (px²)
+  threshold: 50,   // 赤の判定しきい値 (R - max(G,B) > threshold)
+  minArea:   800,  // 最小検出面積 (px²)
 };
 
 const TRAIL_MAX_LEN = 60;
@@ -146,8 +146,9 @@ function detectRed(imageData) {
       const g = data[i + 1];
       const b = data[i + 2];
 
-      // 赤判定: R が高く、G/B より大幅に高い
-      if (r > 100 && r - g > thr && r - b > thr) {
+      // 赤判定: R が高く G/B より大幅に高い、G・B が低い、G-B が小さい（オレンジ除外）
+      // 赤は G≈B（両方低）、オレンジは G>>B なので g - b < 50 で弾く
+      if (r > 150 && r - g > thr && r - b > thr && g < 120 && b < 120 && g - b < 50) {
         sumX  += x;
         sumY  += y;
         count++;
