@@ -28,7 +28,7 @@ const infoArea = document.getElementById('info-area');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 let cfg = {
-  threshold: 50,   // 赤の判定しきい値 (R - max(G,B) > threshold)
+  threshold: 60,   // 赤の判定しきい値 (R - max(G,B) > threshold)
   minArea:   800,  // 最小検出面積 (px²)
 };
 
@@ -146,9 +146,9 @@ function detectRed(imageData) {
       const g = data[i + 1];
       const b = data[i + 2];
 
-      // 赤判定: R が高く G/B より大幅に高い、G・B が低い、G-B が小さい（オレンジ除外）
-      // 赤は G≈B（両方低）、オレンジは G>>B なので g - b < 50 で弾く
-      if (r > 150 && r - g > thr && r - b > thr && g < 120 && b < 120 && g - b < 50) {
+      // 赤判定: R が強く、G・B が両方 90 未満、かつ G-B < 40（オレンジ除外）
+      // 肌色は照明下でも G/B が 100 以上になるためここで弾かれる
+      if (r > 160 && r - g > thr && r - b > thr && g < 90 && b < 90 && g - b < 40) {
         sumX  += x;
         sumY  += y;
         count++;
