@@ -132,61 +132,83 @@ function loop() {
 
   offCtx.drawImage(video, 0, 0, offscreen.width, offscreen.height);
   const imageData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
-  const result    = detectRed(imageData);
+  const result    = detectBlueWhite(imageData);
 
   updateState(result);
   render(result);
 }
 
-// ─── Red detection ───────────────────────────────────────────────────────────
-function detectRed(imageData) {
+// ─── Blue+White detection ─────────────────────────────────────────────────────
+function detectBlueWhite(imageData) {
   const { data, width, height } = imageData;
   const thr = cfg.threshold;
 
-  let sumX = 0, sumY = 0, count = 0;
-  let minX = width, maxX = 0, minY = height, maxY = 0;
+  // Pass 1: 青ピクセルのクラスタを探す
+  let bSumX = 0, bSumY = 0, bCount = 0;
+  let bMinX = width, bMaxX = 0, bMinY = height, bMaxY = 0;
 
   for (let y = 0; y < height; y += SAMPLE_STEP) {
     for (let x = 0; x < width; x += SAMPLE_STEP) {
       const i = (y * width + x) * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      // 赤判定: R が強く、G・B が両方 90 未満、かつ G-B < 40（オレンジ除外）
-      // 肌色は照明下でも G/B が 100 以上になるためここで弾かれる
-      if (r > 160 && r - g > thr && r - b > thr && g < 90 && b < 90 && g - b < 40) {
-        sumX  += x;
-        sumY  += y;
-        count++;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      // 青判定: B が高く R が低い、G も R より低い
+      if (b > 100 && b - r > thr && b - g > 15 && r < 140) {
+        bSumX += x; bSumY += y; bCount++;
+        if (x < bMinX) bMinX = x; if (x > bMaxX) bMaxX = x;
+        if (y < bMinY) bMinY = y; if (y > bMaxY) bMaxY = y;
       }
     }
   }
 
-  const area = count * SAMPLE_STEP * SAMPLE_STEP;
-
-  if (area < cfg.minArea) {
+  if (bCount * SAMPLE_STEP * SAMPLE_STEP < cfg.minArea) {
     return { detected: false };
   }
 
-  // ビデオ座標 → オーバーレイ座標に変換
+  // 青クラスタの重心と探索半径
+  const blueCX = bSumX / bCount;
+  const blueCY = bSumY / bCount;
+  const span   = Math.max(bMaxX - bMinX, bMaxY - bMinY);
+  const searchR = span * 1.8 + 80; // 青の周辺だけ白を探す
+
+  // Pass 2: 青クラスタ周辺の白ピクセルを探す
+  let wSumX = 0, wSumY = 0, wCount = 0;
+  let minX = bMinX, maxX = bMaxX, minY = bMinY, maxY = bMaxY;
+
+  for (let y = 0; y < height; y += SAMPLE_STEP) {
+    for (let x = 0; x < width; x += SAMPLE_STEP) {
+      const dx = x - blueCX, dy = y - blueCY;
+      if (dx * dx + dy * dy > searchR * searchR) continue;
+      const i = (y * width + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      // 白判定: 全チャンネル高く、かつ偏りが少ない
+      const minC = Math.min(r, g, b), maxC = Math.max(r, g, b);
+      if (minC > 160 && maxC - minC < 70) {
+        wSumX += x; wSumY += y; wCount++;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  // 白も十分あるときだけ検出
+  if (wCount * SAMPLE_STEP * SAMPLE_STEP < cfg.minArea * 0.3) {
+    return { detected: false };
+  }
+
+  // 青+白の合成重心
+  const totalCount = bCount + wCount;
+  const rawCX = (bSumX + wSumX) / totalCount;
+  const rawCY = (bSumY + wSumY) / totalCount;
+
   const scaleX = overlay.width  / imageData.width;
   const scaleY = overlay.height / imageData.height;
-
-  // ミラー補正: video は CSS で scaleX(-1) しているため X を反転
-  const rawCX = sumX / count;
-  const rawCY = sumY / count;
-  const cx = (imageData.width - rawCX) * scaleX;
+  const cx = (imageData.width - rawCX) * scaleX; // ミラー補正
   const cy = rawCY * scaleY;
 
   return {
     detected: true,
     cx, cy,
-    area,
+    area: (bCount + wCount) * SAMPLE_STEP * SAMPLE_STEP,
     bbox: {
       x: (imageData.width - maxX) * scaleX,
       y: minY * scaleY,
@@ -434,11 +456,11 @@ function drawMagicCircle(x, y, vel) {
 }
 
 function drawGlowDot(x, y) {
-  // 外側グロー
+  // 外側グロー（青白）
   const grad = ctx.createRadialGradient(x, y, 0, x, y, 32);
-  grad.addColorStop(0, 'rgba(255, 120, 140, 0.9)');
-  grad.addColorStop(0.4, 'rgba(255, 40, 70, 0.5)');
-  grad.addColorStop(1, 'rgba(255, 0, 40, 0)');
+  grad.addColorStop(0, 'rgba(200, 230, 255, 0.95)');
+  grad.addColorStop(0.4, 'rgba(60, 140, 255, 0.6)');
+  grad.addColorStop(1, 'rgba(0, 80, 255, 0)');
   ctx.beginPath();
   ctx.arc(x, y, 32, 0, Math.PI * 2);
   ctx.fillStyle = grad;
@@ -471,7 +493,7 @@ function drawTrail() {
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);
     ctx.lineTo(p1.x, p1.y);
-    ctx.strokeStyle = `rgba(255, ${Math.round(80 + frac * 140)}, ${Math.round(100 + frac * 100)}, ${alpha * frac})`;
+    ctx.strokeStyle = `rgba(${Math.round(80 + frac * 80)}, ${Math.round(140 + frac * 80)}, 255, ${alpha * frac})`;
     ctx.lineWidth   = width;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
