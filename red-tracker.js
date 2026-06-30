@@ -108,6 +108,28 @@ function syncSize() {
   }
 }
 
+// object-fit: cover のクロップ量を考慮した座標変換パラメータ
+function getCoverTransform() {
+  const vw = video.videoWidth  || offscreen.width;
+  const vh = video.videoHeight || offscreen.height;
+  const cw = overlay.width;
+  const ch = overlay.height;
+
+  let scale, ox, oy;
+  if (cw / ch >= vw / vh) {
+    // コンテナが横長 → 幅に合わせてスケール、上下をクロップ
+    scale = cw / vw;
+    ox    = 0;
+    oy    = (ch - vh * scale) / 2;
+  } else {
+    // コンテナが縦長 → 高さに合わせてスケール、左右をクロップ
+    scale = ch / vh;
+    ox    = (cw - vw * scale) / 2;
+    oy    = 0;
+  }
+  return { scale, ox, oy };
+}
+
 function initOffscreen() {
   offscreen = document.createElement('canvas');
   offscreen.width  = video.videoWidth  || 640;
@@ -200,20 +222,20 @@ function detectBlueWhite(imageData) {
   const rawCX = (bSumX + wSumX) / totalCount;
   const rawCY = (bSumY + wSumY) / totalCount;
 
-  const scaleX = overlay.width  / imageData.width;
-  const scaleY = overlay.height / imageData.height;
-  const cx = (imageData.width - rawCX) * scaleX; // ミラー補正
-  const cy = rawCY * scaleY;
+  const { scale, ox, oy } = getCoverTransform();
+  // ミラー補正 + object-fit:cover オフセット
+  const cx = (imageData.width - rawCX) * scale + ox;
+  const cy = rawCY * scale + oy;
 
   return {
     detected: true,
     cx, cy,
     area: (bCount + wCount) * SAMPLE_STEP * SAMPLE_STEP,
     bbox: {
-      x: (imageData.width - maxX) * scaleX,
-      y: minY * scaleY,
-      w: (maxX - minX) * scaleX,
-      h: (maxY - minY) * scaleY,
+      x: (imageData.width - maxX) * scale + ox,
+      y: minY * scale + oy,
+      w: (maxX - minX) * scale,
+      h: (maxY - minY) * scale,
     },
   };
 }
