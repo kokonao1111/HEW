@@ -39,8 +39,15 @@ const SAMPLE_STEP   = 3;   // ピクセル解析のサンプリング間隔 (重
 // ─── State ───────────────────────────────────────────────────────────────────
 let running    = false;
 let rafId      = null;
-let offscreen  = null;   // OffscreenCanvas (フレーム解析用)
+let offscreen  = null;
 let offCtx     = null;
+
+// ─── Magic Effects State ──────────────────────────────────────────────────────
+const MAGIC_COLORS = ['#ffffff', '#ffd700', '#ff88ff', '#aa88ff', '#88ddff', '#ffcc44'];
+const particles  = [];
+const pulseRings = [];
+let pulseTimer   = 0;
+let circleAngle  = 0;
 
 // ─── Slider listeners ────────────────────────────────────────────────────────
 sliderThreshold.addEventListener('input', () => {
@@ -248,21 +255,178 @@ function setUndetected() {
 // ─── Render ──────────────────────────────────────────────────────────────────
 function render(result) {
   ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+  // パーティクル・リングを常に更新（検出が切れても消えるまでアニメ継続）
+  tickMagic();
+  drawPulseRings();
+  drawParticles();
+
   drawTrail();
 
   if (!result.detected) return;
 
   const { cx, cy, bbox } = result;
 
+  // パーティクル生成
+  spawnParticles(cx, cy, wandState.velocity);
+
+  // 一定間隔でパルスリング
+  if (pulseTimer++ % 18 === 0) {
+    pulseRings.push({ x: cx, y: cy, r: 8, life: 1.0 });
+  }
+
+  // 速度が低いとき魔法陣を表示
+  drawMagicCircle(cx, cy, wandState.velocity);
+
   // 検出範囲ボックス
-  ctx.strokeStyle = 'rgba(255, 80, 100, 0.6)';
-  ctx.lineWidth   = 2;
+  ctx.strokeStyle = 'rgba(255, 80, 100, 0.4)';
+  ctx.lineWidth   = 1.5;
   ctx.setLineDash([6, 4]);
   ctx.strokeRect(bbox.x, bbox.y, bbox.w, bbox.h);
   ctx.setLineDash([]);
 
-  // 中心点 – 魔法っぽいグロー
   drawGlowDot(cx, cy);
+}
+
+// ─── Magic: spawn ─────────────────────────────────────────────────────────────
+function spawnParticles(x, y, vel) {
+  const count = 2 + Math.min(Math.floor(vel / 60), 10);
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.2 + Math.random() * 2.5 + vel * 0.006;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 0.8,
+      life: 1.0,
+      decay: 0.018 + Math.random() * 0.022,
+      size: 1.5 + Math.random() * 3,
+      color: MAGIC_COLORS[Math.floor(Math.random() * MAGIC_COLORS.length)],
+      isStar: Math.random() < 0.3,
+    });
+  }
+}
+
+// ─── Magic: tick (physics) ────────────────────────────────────────────────────
+function tickMagic() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += 0.09;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = pulseRings.length - 1; i >= 0; i--) {
+    const r = pulseRings[i];
+    r.r    += 3.5;
+    r.life -= 0.028;
+    if (r.life <= 0) pulseRings.splice(i, 1);
+  }
+  circleAngle += 0.025;
+}
+
+// ─── Magic: draw pulse rings ──────────────────────────────────────────────────
+function drawPulseRings() {
+  for (const r of pulseRings) {
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(200, 120, 255, ${r.life * 0.55})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r * 0.6, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255, 200, 100, ${r.life * 0.3})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+// ─── Magic: draw particles ────────────────────────────────────────────────────
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    if (p.isStar) {
+      drawStar(ctx, p.x, p.y, p.size * 2.2, p.color);
+    } else {
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2.5);
+      g.addColorStop(0, p.color);
+      g.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawStar(ctx, x, y, r, color) {
+  const pts = 4;
+  ctx.beginPath();
+  for (let i = 0; i < pts * 2; i++) {
+    const a    = (i / (pts * 2)) * Math.PI * 2 - Math.PI / 2;
+    const dist = i % 2 === 0 ? r : r * 0.35;
+    const px = x + Math.cos(a) * dist;
+    const py = y + Math.sin(a) * dist;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+// ─── Magic: draw magic circle ─────────────────────────────────────────────────
+function drawMagicCircle(x, y, vel) {
+  const alpha = Math.max(0, 1 - vel / 200) * 0.75;
+  if (alpha < 0.05) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+
+  // 外輪
+  ctx.beginPath();
+  ctx.arc(0, 0, 56, 0, Math.PI * 2);
+  ctx.strokeStyle = '#cc66ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 内輪
+  ctx.beginPath();
+  ctx.arc(0, 0, 38, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(180, 80, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 回転する放射線
+  ctx.rotate(circleAngle);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10);
+    ctx.lineTo(Math.cos(a) * 56, Math.sin(a) * 56);
+    ctx.strokeStyle = 'rgba(200, 120, 255, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // 逆回転の六角形
+  ctx.rotate(-circleAngle * 2);
+  ctx.beginPath();
+  for (let i = 0; i <= 6; i++) {
+    const a  = (i / 6) * Math.PI * 2;
+    const px = Math.cos(a) * 38;
+    const py = Math.sin(a) * 38;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = 'rgba(255, 200, 100, 0.45)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawGlowDot(x, y) {
