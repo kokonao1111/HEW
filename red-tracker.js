@@ -28,8 +28,8 @@ const infoArea = document.getElementById('info-area');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 let cfg = {
-  threshold: 60,   // 赤の判定しきい値 (R - max(G,B) > threshold)
-  minArea:   800,  // 最小検出面積 (px²)
+  threshold: 35,   // 青しきい値 (B - R > threshold)
+  minArea:   200,  // 最小検出面積 (px²)
 };
 
 const TRAIL_MAX_LEN = 60;
@@ -168,7 +168,7 @@ function detectBlueWhite(imageData) {
   const blueCX = bSumX / bCount;
   const blueCY = bSumY / bCount;
   const span   = Math.max(bMaxX - bMinX, bMaxY - bMinY);
-  const searchR = span * 1.8 + 80; // 青の周辺だけ白を探す
+  const searchR = span * 3.0 + 150; // 青の周辺だけ白を探す
 
   // Pass 2: 青クラスタ周辺の白ピクセルを探す
   let wSumX = 0, wSumY = 0, wCount = 0;
@@ -182,7 +182,7 @@ function detectBlueWhite(imageData) {
       const r = data[i], g = data[i + 1], b = data[i + 2];
       // 白判定: 全チャンネル高く、かつ偏りが少ない
       const minC = Math.min(r, g, b), maxC = Math.max(r, g, b);
-      if (minC > 160 && maxC - minC < 70) {
+      if (minC > 130 && maxC - minC < 80) {
         wSumX += x; wSumY += y; wCount++;
         if (x < minX) minX = x; if (x > maxX) maxX = x;
         if (y < minY) minY = y; if (y > maxY) maxY = y;
@@ -191,7 +191,7 @@ function detectBlueWhite(imageData) {
   }
 
   // 白も十分あるときだけ検出
-  if (wCount * SAMPLE_STEP * SAMPLE_STEP < cfg.minArea * 0.3) {
+  if (wCount * SAMPLE_STEP * SAMPLE_STEP < cfg.minArea * 0.2) {
     return { detected: false };
   }
 
